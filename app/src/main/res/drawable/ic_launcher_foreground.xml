@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Liquid Glass Camera Frame -->
+    <path
+        android:pathData="M36,26h36c5.52,0 10,4.48 10,10v36c0,5.52 -4.48,10 -10,10H36c-5.52,0 -10,-4.48 -10,-10V36c0,-5.52 4.48,-10 10,-10z"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FF00E5FF"
+        android:fillColor="#260066FF" />
+
+    <!-- Camera Lens Ring -->
+    <path
+        android:pathData="M54,39A15,15 0 1,1 54,69A15,15 0 1,1 54,39z"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FFFFFFFF"
+        android:fillColor="#3300E5FF" />
+
+    <!-- Reel Play Triangle Inside Lens -->
+    <path
+        android:pathData="M50,47L62,54L50,61Z"
+        android:fillColor="#FFFFFFFF" />
+
+    <!-- VETA Cyan Sparkle Dot -->
+    <path
+        android:pathData="M71,33A3.5,3.5 0 1,1 71,40A3.5,3.5 0 1,1 71,33z"
+        android:fillColor="#FF00E5FF" />
+</vector>

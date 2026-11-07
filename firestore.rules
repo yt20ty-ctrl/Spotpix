@@ -1,0 +1,165 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches request.auth.uid)
+    // Fields:
+    //   - userId: string (required, immutable, == userId)
+    //   - username: string (required, 1..40 chars)
+    //   - displayName: string (required, 1..80 chars)
+    //   - email: string (required, valid email <= 254 chars)
+    //   - bio: string (required, 0..300 chars)
+    //   - avatarUrl: string (required, 0..500 chars)
+    //   - role: string (required, 'USER' | 'CREATOR' | 'SUPER_ADMIN')
+    //   - blueTickVerified: bool (required, non-admin create must be false)
+    //   - isMonetized: bool (required, non-admin create must be false)
+    //   - createdAt: timestamp (required, immutable, <= request.time)
+    //   - updatedAt: timestamp (optional, <= request.time)
+    //
+    // Collection: posts
+    // Document ID: {postId}
+    // Fields:
+    //   - userId: string (required, immutable, == request.auth.uid)
+    //   - authorUsername: string (required, 1..40 chars)
+    //   - caption: string (required, 0..1000 chars)
+    //   - mediaUrl: string (required, 1..500 chars)
+    //   - mediaType: string (required, 'POST' | 'REEL' | 'STORY')
+    //   - likesCount: int (required, >= 0 && <= 100000000)
+    //   - createdAt: timestamp (required, immutable, <= request.time)
+    //   - updatedAt: timestamp (optional, <= request.time)
+    //
+    // ===============================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.size() >= 3 && email.size() <= 254 &&
+        email.matches('^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        ('email' in request.auth.token &&
+         'email_verified' in request.auth.token &&
+         request.auth.token.email_verified == true &&
+         (request.auth.token.email == "VaanijSingh28@gmail.com" ||
+          request.auth.token.email == "yt20ty@gmail.com")) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "SUPER_ADMIN")
+      );
+    }
+
+    function isValidUserProfile(data, userId) {
+      let requiredFields = ['userId', 'username', 'displayName', 'email', 'bio', 'avatarUrl', 'role', 'blueTickVerified', 'isMonetized', 'createdAt'];
+      let allowedFields = ['userId', 'username', 'displayName', 'email', 'bio', 'avatarUrl', 'role', 'blueTickVerified', 'isMonetized', 'createdAt', 'updatedAt'];
+      return data.keys().hasAll(requiredFields) &&
+        data.keys().hasOnly(allowedFields) &&
+        data.userId is string && data.userId == userId &&
+        data.username is string && data.username.size() >= 1 && data.username.size() <= 40 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        isValidEmail(data.email) &&
+        data.bio is string && data.bio.size() <= 300 &&
+        data.avatarUrl is string && data.avatarUrl.size() <= 500 &&
+        data.role in ['USER', 'CREATOR', 'SUPER_ADMIN'] &&
+        data.blueTickVerified is bool &&
+        data.isMonetized is bool &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidSpotpixPost(data) {
+      let requiredFields = ['userId', 'authorUsername', 'caption', 'mediaUrl', 'mediaType', 'likesCount', 'createdAt'];
+      let allowedFields = ['userId', 'authorUsername', 'caption', 'mediaUrl', 'mediaType', 'likesCount', 'createdAt', 'updatedAt'];
+      return data.keys().hasAll(requiredFields) &&
+        data.keys().hasOnly(allowedFields) &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.authorUsername is string && data.authorUsername.size() >= 1 && data.authorUsername.size() <= 40 &&
+        data.caption is string && data.caption.size() <= 1000 &&
+        data.mediaUrl is string && data.mediaUrl.size() >= 1 && data.mediaUrl.size() <= 500 &&
+        data.mediaType in ['POST', 'REEL', 'STORY'] &&
+        data.likesCount is int && data.likesCount >= 0 && data.likesCount <= 100000000 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isSuperAdmin();
+
+      allow create: if isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        (
+          isSuperAdmin() ||
+          (incoming().role == 'USER' && incoming().blueTickVerified == false && incoming().isMonetized == false)
+        );
+
+      allow update: if isValidId(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isSuperAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['username', 'displayName', 'bio', 'avatarUrl', 'updatedAt']) &&
+            incoming().role == existing().role &&
+            incoming().blueTickVerified == existing().blueTickVerified &&
+            incoming().isMonetized == existing().isMonetized
+          )
+        );
+
+      allow delete: if isOwner(userId) || isSuperAdmin();
+    }
+
+    match /posts/{postId} {
+      allow read: if isDocOwner() || isSuperAdmin();
+
+      allow create: if isSignedIn() &&
+        isValidId(postId) &&
+        isValidSpotpixPost(incoming()) &&
+        incoming().userId == request.auth.uid;
+
+      allow update: if isValidId(postId) &&
+        isDocOwner() &&
+        isValidSpotpixPost(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'likesCount', 'updatedAt']);
+
+      allow delete: if isDocOwner() || isSuperAdmin();
+    }
+
+    // Default deny for all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
